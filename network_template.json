@@ -1,0 +1,7 @@
+{
+    "[your domain here]": {
+        "A": ["[your ip here]"],
+        "CNAME": [],
+        "AAAA": []
+    }
+}

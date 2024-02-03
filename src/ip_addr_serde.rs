@@ -1,6 +1,6 @@
 use std::{net::IpAddr, ops::{Deref, DerefMut}, str::FromStr};
 use serde::{Deserialize, Serialize, Deserializer};
-use trust_dns_server::proto::rr::{rdata::CNAME, Name, RData};
+use trust_dns_server::proto::rr::{rdata::CNAME, LowerName, Name, RData};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SerializableIpAddr(
@@ -85,5 +85,14 @@ impl<'de> Deserialize<'de> for SerializableCNAME {
 impl Into<RData> for SerializableCNAME {
     fn into(self) -> RData {
         self.rdata
+    }
+}
+
+impl Into<LowerName> for SerializableCNAME {
+    fn into(self) -> LowerName {
+        match self.rdata {
+            RData::CNAME(cname) => cname.0.into(),
+            _ => panic!("Not a CNAME"),
+        }
     }
 }

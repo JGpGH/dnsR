@@ -12,6 +12,6 @@ pub struct Options {
     pub tcp: Vec<SocketAddr>,
 
     /// Domain name
-    #[clap(long, short, default_value = "superfruitmix.dev")]
+    #[clap(long, short, default_value = "*")]
     pub domain: String,
 }

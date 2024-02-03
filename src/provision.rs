@@ -31,7 +31,21 @@ impl NetworkEntry {
     }
 }
 
-pub fn get_network() -> Result<HashMap<String, NetworkEntry>> {
+#[derive(Clone, Debug, Deserialize)]
+pub struct Network {
+    entries: HashMap<String, NetworkEntry>,
+    pub zone: SerializableCNAME
+}
+
+impl Network {
+    pub fn resolve(&self, name: Name) -> Option<NetworkEntry> {
+        self.entries.get(name.to_string().as_str()).map(|entry| {
+            entry.clone()
+        })
+    }
+}
+
+pub fn get_network() -> Result<Network> {
     let mut file = File::open("network.json")?;
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
@@ -40,6 +54,6 @@ pub fn get_network() -> Result<HashMap<String, NetworkEntry>> {
             return Err(DNSError::Io(e).into());
         }
     }
-    let network: HashMap<String, NetworkEntry> = serde_json::from_str(&contents)?;
+    let network: Network = serde_json::from_str(&contents)?;
     Ok(network)
 }

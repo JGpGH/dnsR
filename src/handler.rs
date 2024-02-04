@@ -68,7 +68,6 @@ impl Handler {
         let builder = MessageResponseBuilder::from_message_request(request);
         match responder.send_response(builder.build(header, &[], &[], &[], &[])).await {
             Ok(info) => {
-                println!("Sent err response");
                 return info
             },
             Err(error) => {
@@ -118,7 +117,6 @@ impl RequestHandler for Handler {
         let response = builder.build(header, records.iter(), &[], &[], &[]);
         match responder.send_response(response).await {
             Ok(info) => {
-                println!("Sent response");
                 info
             },
             Err(error) => {

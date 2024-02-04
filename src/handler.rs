@@ -1,7 +1,5 @@
-use std::{collections::HashMap, str::FromStr};
-
-use crate::{options::Options, provision::{Network, NetworkEntry}};
-use trust_dns_server::{authority::MessageResponseBuilder, proto::{op::{Header, MessageType, OpCode, ResponseCode}, rr::{LowerName, Name}, serialize::binary::BinEncodable}, server::{Request, RequestHandler, ResponseHandler, ResponseInfo}};
+use crate::provision::Network;
+use trust_dns_server::{authority::MessageResponseBuilder, proto::{op::{Header, MessageType, OpCode, ResponseCode}, rr::{LowerName, Name}}, server::{Request, RequestHandler, ResponseHandler, ResponseInfo}};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DNSError {
@@ -20,14 +18,17 @@ pub enum DNSError {
 pub struct Handler {
     zone: LowerName,
     network: Network,
+    default_ttl: u32,
 }
 
 impl Handler {
     /// Create new handler from command-line options.
-    pub fn from_options(options: &Options, network: Network) -> Self {
+    pub fn from_network(network: Network) -> Self {
+        let net_name: Name = network.zone.clone().into();
         Handler {
-            zone: LowerName::from(Name::from_str(&options.domain).unwrap()),
+            zone: LowerName::from(net_name),
             network,
+            default_ttl: 3,
         }
     }
 
@@ -50,29 +51,31 @@ impl Handler {
         Ok(())
     }
 
-    async fn match_and_respond<R: ResponseHandler>(
+    async fn handle_err<R: ResponseHandler>(
         &self,
         request: &Request,
+        mut header: Header,
+        error: DNSError,
         mut responder: R,
-    ) -> Result<ResponseInfo, DNSError> {
-        self.validate_request(request)?;
+    ) -> ResponseInfo {
+        let response_code = match error {
+            DNSError::InvalidOpCode(_) => ResponseCode::Refused,
+            DNSError::InvalidMessageType(_) => ResponseCode::Refused,
+            DNSError::InvalidZone(_) => ResponseCode::Refused,
+            DNSError::Io(_) => ResponseCode::ServFail,
+        };
+        header.set_response_code(response_code);
         let builder = MessageResponseBuilder::from_message_request(request);
-        let mut header = Header::response_from_request(request.header());
-        header.set_id(request.header().id());
-        header.set_authoritative(true);
-        header.set_recursion_available(false);
-        println!("Query: {:?}", request.query().name().to_string());
-        let entry = self.network.resolve(request.query().name().into());
-        if entry.is_none() {
-            header.set_response_code(ResponseCode::NXDomain);
-            let response = builder.build(header, &[], &[], &[], &[]);
-            return Ok(responder.send_response(response).await?);
+        match responder.send_response(builder.build(header, &[], &[], &[], &[])).await {
+            Ok(info) => {
+                println!("Sent err response");
+                return info
+            },
+            Err(error) => {
+                eprintln!("Error sending response: {}", error);
+                return ResponseInfo::from(header);
+            }
         }
-
-        let records = entry.unwrap().get_records(request.query().name().clone().into(), 300);
-        let response = builder.build(header, records.iter(), &[], &[], &[]);
-        println!("Response: {:?}", response);
-        Ok(responder.send_response(response).await?)
     }
 }
 
@@ -83,28 +86,46 @@ impl RequestHandler for Handler {
         request: &Request,
         mut responder: R,
     ) -> ResponseInfo {
-        match self.match_and_respond(request, responder.clone()).await {
-            Ok(info) => info,
-            Err(error) => {
-                eprintln!("Error: {}", error);
-                let mut header = Header::new();
-                let response_code = match error {
-                    DNSError::InvalidOpCode(_) => ResponseCode::Refused,
-                    DNSError::InvalidMessageType(_) => ResponseCode::Refused,
-                    DNSError::InvalidZone(_) => ResponseCode::Refused,
-                    DNSError::Io(_) => ResponseCode::ServFail,
-                };
-                header.set_response_code(response_code);
-                header.set_id(request.header().id());
-                let builder = MessageResponseBuilder::from_message_request(request);
-                match responder.send_response(builder.build(header, &[], &[], &[], &[])).await {
-                    Ok(info) => info,
-                    Err(error) => {
-                        eprintln!("Error: {}", error);
-                        return ResponseInfo::from(header);
-                    }
+        println!("Query: {:?}", request.query().name().to_string());
+        match self.validate_request(request) {
+            Ok(_) => (),
+            Err(error) =>{
+                return self.handle_err(request, Header::response_from_request(request.header()), error, responder).await
+            }
+        }
+
+        let builder = MessageResponseBuilder::from_message_request(request);
+        let mut header = Header::response_from_request(request.header());
+        header.set_id(request.header().id());
+        header.set_authoritative(true);
+        header.set_recursion_available(false);
+
+        let entry = self.network.resolve(request.query().name().into());
+        if entry.is_none() {
+            header.set_response_code(ResponseCode::NXDomain);
+            let response = builder.build(header, &[], &[], &[], &[]);
+            match responder.send_response(response).await {
+                Ok(info) => return info,
+                Err(error) => {
+                    eprintln!("Error sending response: {}", error);
+                    return ResponseInfo::from(header);
                 }
             }
         }
+
+        let records = entry.unwrap().get_records(request.query().name().clone().into(), self.default_ttl);
+        println!("Records: {:?}", records);
+        let response = builder.build(header, records.iter(), &[], &[], &[]);
+        match responder.send_response(response).await {
+            Ok(info) => {
+                println!("Sent response");
+                info
+            },
+            Err(error) => {
+                eprintln!("Error sending response: {}", error);
+                return ResponseInfo::from(header);
+            }
+        }
+
     }
 }

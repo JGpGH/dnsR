@@ -96,3 +96,24 @@ impl Into<LowerName> for SerializableCNAME {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct SerializableName(Name);
+
+impl<'de> Deserialize<'de> for SerializableName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Name::from_str(&s)
+            .map(SerializableName)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Into<Name> for SerializableName {
+    fn into(self) -> Name {
+        self.0
+    }
+}

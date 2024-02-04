@@ -10,8 +10,4 @@ pub struct Options {
     /// TCP socket to listen on.
     #[clap(long, short, default_value = "0.0.0.0:1053")]
     pub tcp: Vec<SocketAddr>,
-
-    /// Domain name
-    #[clap(long, short, default_value = "*")]
-    pub domain: String,
 }

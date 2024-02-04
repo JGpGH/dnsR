@@ -18,7 +18,8 @@ const TCP_TIMEOUT: Duration = Duration::from_secs(10);
 async fn main() -> Result<()> {
     let options = Options::parse();
     let network = provision::get_network()?;
-    let handler = Handler::from_options(&options, network);
+    println!("using: {:?}, serving zone {:?}", options, network.zone);
+    let handler = Handler::from_network(network);
 
     // create DNS server
     let mut server = ServerFuture::new(handler);

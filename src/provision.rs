@@ -1,4 +1,4 @@
-use crate::{handler::DNSError, ip_addr_serde::{SerializableIpAddr, SerializableCNAME}};
+use crate::{handler::DNSError, ip_addr_serde::{SerializableCNAME, SerializableIpAddr, SerializableName}};
 use serde_json;
 use serde::Deserialize;
 use anyhow::Result;
@@ -34,7 +34,7 @@ impl NetworkEntry {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Network {
     entries: HashMap<String, NetworkEntry>,
-    pub zone: SerializableCNAME
+    pub zone: SerializableName,
 }
 
 impl Network {
